@@ -20,9 +20,13 @@ class TestEntraAuthClient:
         )
 
     def test_scopes(self) -> None:
-        """Test that SCOPES includes required OIDC scopes."""
-        assert "openid" in EntraAuthClient.SCOPES
-        assert "profile" in EntraAuthClient.SCOPES
+        """Test that SCOPES includes only non-reserved scopes.
+
+        MSAL automatically adds reserved scopes (openid, profile, offline_access),
+        so they must not be included explicitly.
+        """
+        reserved = {"openid", "profile", "offline_access"}
+        assert not reserved.intersection(EntraAuthClient.SCOPES)
         assert "email" in EntraAuthClient.SCOPES
 
     @patch("entra_id_auth_example.client.ConfidentialClientApplication")

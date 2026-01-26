@@ -28,6 +28,7 @@ class AuthConfig:
     client_secret: str
     tenant_id: str
     redirect_uri: str
+    ssl_ca_file: str | None = None
 
     @property
     def authority(self) -> str:
@@ -84,6 +85,7 @@ def load_config() -> AuthConfig:
     client_secret = values.get("AZURE_CLIENT_SECRET")
     tenant_id = values.get("AZURE_TENANT_ID")
     redirect_uri = values.get("AZURE_REDIRECT_URI") or "http://localhost:8501/callback"
+    ssl_ca_file = values.get("SSL_CA_FILE") or None
 
     missing: list[str] = []
     if not client_id:
@@ -106,4 +108,5 @@ def load_config() -> AuthConfig:
         client_secret=client_secret,
         tenant_id=tenant_id,
         redirect_uri=redirect_uri,
+        ssl_ca_file=ssl_ca_file,
     )

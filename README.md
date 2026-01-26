@@ -37,7 +37,16 @@ AZURE_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 AZURE_CLIENT_SECRET=your-client-secret
 AZURE_TENANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 AZURE_REDIRECT_URI=http://localhost:8501/callback
+
+# 企業プロキシ環境の場合（任意）
+SSL_CA_FILE=/path/to/your/ca.pem
 ```
+
+> **企業プロキシ環境について**: HTTPSトラフィックを検査する企業プロキシの環境では、
+> `SSL_CA_FILE`にプロキシのCA証明書パスを設定してください。
+> Python 3.13ではSSL検証が厳格化（`VERIFY_X509_STRICT`）されており、
+> AKI拡張のないCA証明書が拒否されるため、本アプリでは`SSL_CA_FILE`設定時に
+> このフラグを自動的に無効化します。
 
 ### 3. Azure Portalでのアプリ登録
 
