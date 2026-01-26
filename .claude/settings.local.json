@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make check:*)",
+      "Bash(uv run python:*)",
+      "Bash(uv pip:*)",
+      "Bash(uv sync:*)",
+      "Bash(make test:*)",
+      "Bash(make test-cov:*)",
+      "Bash(make install-dev:*)",
+      "Bash(make:*)",
+      "Bash(npx cspell:*)"
+    ]
+  }
+}

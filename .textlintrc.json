@@ -1,0 +1,6 @@
+{
+  "rules": {
+    "sentence-length": false,
+    "max-ten": false
+  }
+}

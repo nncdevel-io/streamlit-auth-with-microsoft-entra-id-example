@@ -1,0 +1,10 @@
+{
+  "config": {
+    // Line length: 120 characters
+    "MD013": {
+      "line_length": 120,
+      // Disable line length check in tables
+      "tables": false
+    }
+  }
+}
