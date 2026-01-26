@@ -41,5 +41,5 @@ htmlcov/
 .mypy_cache/
 
 # Documentation
-api-docs/_build/
+api-docs/
 docs/PYTHON_KNOWHOW.md
