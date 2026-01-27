@@ -2,19 +2,6 @@
 
 import streamlit as st
 
-from entra_id_auth_example import render_sidebar_account, render_site_header
-
-st.set_page_config(
-    page_title="About",
-    page_icon="ℹ️",
-)
-
-# サイドバーアカウントを表示
-render_sidebar_account()
-
-# サイトヘッダー
-render_site_header()
-
 st.subheader("ℹ️ About")
 
 st.write("このアプリケーションはMicrosoft Entra ID認証のサンプル実装です。")

@@ -84,7 +84,7 @@ def load_config() -> AuthConfig:
     client_id = values.get("AZURE_CLIENT_ID")
     client_secret = values.get("AZURE_CLIENT_SECRET")
     tenant_id = values.get("AZURE_TENANT_ID")
-    redirect_uri = values.get("AZURE_REDIRECT_URI") or "http://localhost:8501/callback"
+    redirect_uri = values.get("AZURE_REDIRECT_URI") or "http://localhost:8501/"
     ssl_ca_file = values.get("SSL_CA_FILE") or None
 
     missing: list[str] = []

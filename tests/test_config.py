@@ -83,7 +83,7 @@ class TestLoadConfigProduction:
         }
         with patch.dict(os.environ, env_vars, clear=True):
             config = load_config()
-            assert config.redirect_uri == "http://localhost:8501/callback"
+            assert config.redirect_uri == "http://localhost:8501/"
 
 
 class TestLoadConfigDevelopment:

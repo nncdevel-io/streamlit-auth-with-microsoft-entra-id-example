@@ -1,7 +1,12 @@
 {
   "version": "0.2",
   "language": "en",
-  "words": [],
+  "words": [
+    "MSAL",
+    "pyproject",
+    "Streamlit",
+    "textlintrc"
+  ],
   "ignorePaths": [
     ".*",
     "api-docs",

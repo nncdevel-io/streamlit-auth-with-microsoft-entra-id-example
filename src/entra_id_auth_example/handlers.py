@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
+import logging
 import secrets
 from typing import Any, TypedDict, cast
 
 import streamlit as st
+import streamlit.components.v1 as components
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from .client import EntraAuthClient
 from .config import load_config
+
+logger = logging.getLogger(__name__)
+
+
+def _get_session_id() -> str:
+    """デバッグ用にStreamlitセッションIDを取得する。"""
+    ctx = get_script_run_ctx()
+    if ctx is None:
+        return "no-context"
+    return ctx.session_id
 
 
 class UserInfo(TypedDict):
@@ -19,8 +35,47 @@ class UserInfo(TypedDict):
     email: str
 
 
+# OAuth state Cookie設定
+_STATE_COOKIE_NAME = "oauth_state"
+_STATE_COOKIE_MAX_AGE = 600  # 10分
+
+
+def _create_signed_state(secret: str) -> tuple[str, str]:
+    """HMAC署名付きのOAuth stateを生成する。
+
+    Args:
+        secret: HMAC署名に使用するシークレットキー。
+
+    Returns:
+        (nonce, signed_state) のタプル。
+        nonceはCookieに保存し、signed_stateはOAuthのstateパラメータとして使用する。
+    """
+    nonce = secrets.token_urlsafe(32)
+    sig = hmac.new(secret.encode(), nonce.encode(), hashlib.sha256).hexdigest()
+    return nonce, f"{nonce}.{sig}"
+
+
+def _verify_state(state: str | None, cookie_nonce: str | None, secret: str) -> bool:
+    """stateのHMAC署名を検証し、CookieのnonceとDouble Submit検証を行う。
+
+    Args:
+        state: コールバックのクエリパラメータから取得したstate。
+        cookie_nonce: ブラウザCookieから取得したnonce。
+        secret: HMAC検証に使用するシークレットキー。
+
+    Returns:
+        検証成功ならTrue。
+    """
+    if not state or not cookie_nonce or "." not in state:
+        return False
+    nonce, sig = state.rsplit(".", 1)
+    expected_sig = hmac.new(secret.encode(), nonce.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected_sig):
+        return False
+    return hmac.compare_digest(nonce, cookie_nonce)
+
+
 # セッションステートのキー
-_AUTH_STATE_KEY = "auth_state"
 _AUTHENTICATED_KEY = "authenticated"
 _USER_KEY = "user"
 _TOKEN_CLAIMS_KEY = "token_claims"
@@ -39,16 +94,37 @@ def login() -> None:
 
     CSRFトークンを生成し、ユーザーをEntra IDログインページにリダイレクトする。
     """
+    session_id = _get_session_id()
+    logger.info("[login] セッションID=%s", session_id)
+
+    config = load_config()
     client = _get_client()
 
-    # CSRFステートトークンを生成
-    state = secrets.token_urlsafe(32)
-    st.session_state[_AUTH_STATE_KEY] = state
+    # HMAC署名付きstateを生成
+    nonce, state = _create_signed_state(config.client_secret)
+    logger.info("[login] state生成: nonce=%s (セッション=%s)", nonce[:16] + "...", session_id)
 
-    # 認可URLを取得してリダイレクト
+    # 認可URLを取得
     auth_url = client.get_auth_url(state)
+    logger.info("[login] Entra IDへリダイレクト (セッション=%s)", session_id)
+
+    # Cookie設定 → リダイレクト（2段階で実行）
+    # components.html(): サンドボックス iframe 内でJS実行。allow-same-originで
+    #   メインページと同一オリジンのCookieを設定可能。ただしallow-top-navigation
+    #   がないためリダイレクト不可。
+    # st.markdown(): meta refresh でリダイレクト。content="1" で1秒の猶予を設け、
+    #   iframe の Cookie 設定が完了してからリダイレクトする。
+    secure = "; Secure" if config.redirect_uri.startswith("https://") else ""
+    cookie_value = (
+        f"{_STATE_COOKIE_NAME}={nonce}; path=/; "
+        f"max-age={_STATE_COOKIE_MAX_AGE}; SameSite=Lax{secure}"
+    )
+    components.html(
+        f"<script>document.cookie={json.dumps(cookie_value)};</script>",
+        height=0,
+    )
     st.markdown(
-        f'<meta http-equiv="refresh" content="0;url={auth_url}">',
+        f'<meta http-equiv="refresh" content="1;url={auth_url}">',
         unsafe_allow_html=True,
     )
     st.stop()
@@ -64,7 +140,7 @@ def logout() -> None:
     logout_url = client.logout_url
 
     # セッションステートをクリア
-    for key in [_AUTHENTICATED_KEY, _USER_KEY, _TOKEN_CLAIMS_KEY, _AUTH_STATE_KEY]:
+    for key in [_AUTHENTICATED_KEY, _USER_KEY, _TOKEN_CLAIMS_KEY]:
         if key in st.session_state:
             del st.session_state[key]
 
@@ -85,34 +161,61 @@ def handle_callback() -> bool:
     Returns:
         認証が成功した場合はTrue、それ以外はFalse。
     """
+    session_id = _get_session_id()
     query_params = st.query_params
 
     # コールバックリクエストかどうかを確認
     if "code" not in query_params:
         return False
 
+    logger.info("[callback] コールバック検出 (セッション=%s)", session_id)
+    logger.info(
+        "[callback] session_stateのキー: %s", list(st.session_state.keys())
+    )
+
     code = query_params.get("code")
     state = query_params.get("state")
 
     # codeが存在することを確認（前のチェックで常にtrueのはず）
     if code is None:
+        logger.warning("[callback] codeがNone (セッション=%s)", session_id)
         return False
 
-    # CSRF防止のためstateを検証
-    expected_state = st.session_state.get(_AUTH_STATE_KEY)
-    if not expected_state or state != expected_state:
+    # CSRF防止のためstateを検証（Cookie + HMAC Double Submit方式）
+    cookie_nonce = st.context.cookies.get(_STATE_COOKIE_NAME)
+    state_short = state[:16] + "..." if state else "None"
+    cookie_short = cookie_nonce[:16] + "..." if cookie_nonce else "None"
+    logger.info(
+        "[callback] state検証: state=%s, cookie=%s (セッション=%s)",
+        state_short,
+        cookie_short,
+        session_id,
+    )
+    config = load_config()
+    if not _verify_state(state, cookie_nonce, config.client_secret):
+        logger.warning(
+            "[callback] state検証失敗: cookie=%s, state=%s (セッション=%s)",
+            "未設定" if not cookie_nonce else "設定済",
+            "未指定" if not state else "HMAC不一致またはnonce不一致",
+            session_id,
+        )
         st.error("Invalid state parameter. Please try logging in again.")
         return False
 
-    # 検証後にstateをクリア
-    del st.session_state[_AUTH_STATE_KEY]
+    # 使用済みCookieをクリア
+    components.html(
+        f'<script>document.cookie="{_STATE_COOKIE_NAME}=; path=/; max-age=0";</script>',
+        height=0,
+    )
 
     # 認可コードをトークンに交換
     client = _get_client()
+    logger.info("[callback] トークン交換開始 (セッション=%s)", session_id)
     result = client.acquire_token_by_code(code)
 
     if "error" in result:
         error_desc = result.get("error_description", result.get("error", "Unknown error"))
+        logger.error("[callback] トークン交換失敗: %s (セッション=%s)", error_desc, session_id)
         st.error(f"Authentication failed: {error_desc}")
         return False
 
@@ -123,6 +226,10 @@ def handle_callback() -> bool:
         "name": claims.get("name", ""),
         "email": claims.get("email") or claims.get("preferred_username", ""),
     }
+
+    logger.info(
+        "[callback] 認証成功: user=%s (セッション=%s)", user_info["name"], session_id
+    )
 
     # セッションステートに保存
     st.session_state[_AUTHENTICATED_KEY] = True
