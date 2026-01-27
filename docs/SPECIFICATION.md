@@ -1,5 +1,10 @@
 # アプリケーション仕様書
 
+| 項目 | 内容 |
+|------|------|
+| バージョン | 0.2.0 |
+| 更新日 | 2026年1月27日 |
+
 ## アプリケーション概要
 
 本アプリケーションは、StreamlitフレームワークにMicrosoft Entra ID（旧Azure AD）認証を組み込んだサンプル実装です。OpenID Connect（OIDC）のAuthorization Code Flowを使用し、企業向けシングルサインオン（SSO）機能を提供します。
@@ -14,10 +19,12 @@
 
 | 項目 | 技術 |
 |------|------|
-| フレームワーク | Streamlit |
+| フレームワーク | Streamlit >=1.37.0 |
+| マルチページ | `st.navigation()` API |
 | 認証プロトコル | OpenID Connect (OIDC) |
 | IdP | Microsoft Entra ID |
 | 認証ライブラリ | MSAL (Microsoft Authentication Library) |
+| CSRF対策 | Cookie + HMAC Double Submit |
 | 言語 | Python 3.13+ |
 
 ## 機能一覧
@@ -26,13 +33,28 @@
 |--------|------|
 | ログイン | Microsoft Entra IDを使用したシングルサインオン。ログインボタン押下でEntra IDのログインページにリダイレクトする。 |
 | ログアウト | セッションをクリアし、Entra IDのログアウトエンドポイントにリダイレクトする。ログアウト後はアプリケーションのトップページに戻る。 |
-| 認証コールバック処理 | Entra IDからの認可コードを受け取り、トークンに交換する。CSRF対策のstateパラメータ検証を行う。 |
+| 認証コールバック処理 | Entra IDからの認可コードを受け取り、トークンに交換する。Cookie + HMAC Double Submit方式でstateパラメーターを検証する。 |
 | ユーザー情報取得 | IDトークンのclaimsからユーザーID、名前、メールアドレスを抽出して表示する。 |
 | 認証ガード | 認証が必要なページへの未認証アクセスをブロックし、ログインボタンを表示する。 |
 | サイドバーアカウント表示 | 認証済み時にサイドバー下部にユーザーアバター（イニシャル）、名前、メールアドレス、ログアウトボタンを表示する。未認証時はサイドバーを非表示にする。 |
 | サイトヘッダー | 全ページ共通のヘッダーを表示。左側にサイトタイトル（ホームへのリンク）、右側にAboutページへのリンク（?アイコン）を配置。 |
 
 ## 画面一覧
+
+### アプリ構成
+
+`st.navigation()` APIによるマルチページ構成。`app.py` がエントリポイントとして共通レイアウト（サイトヘッダー、サイドバー）を描画し、各ページは固有のコンテンツのみを担当する。
+
+```text
+app.py（エントリポイント）
+├── OAuthコールバック処理（?code= 検知時）
+├── 共通レイアウト（サイドバー、ヘッダー）
+└── st.navigation()
+    ├── Home    （/）        → pages/home.py
+    ├── About   （/about）    → pages/about.py
+    ├── Dashboard（/dashboard）→ pages/dashboard.py
+    └── Profile （/profile）  → pages/profile.py
+```
 
 ### ホーム画面（/）
 
@@ -97,27 +119,42 @@
 
 ### 認証フロー
 
-```
+```text
 1. ユーザーがログインボタンをクリック
-2. アプリがCSRF対策用のstateトークンを生成してセッションに保存
-3. Entra IDの認可エンドポイントにリダイレクト
-4. ユーザーがEntra IDでログイン
-5. Entra IDがアプリのコールバックURLに認可コードとstateを付与してリダイレクト
-6. アプリがstateを検証（CSRF対策）
-7. アプリが認可コードをトークンエンドポイントでIDトークン・アクセストークンに交換
-8. MSALがIDトークンを自動検証（署名、iss、aud、exp等）
-9. IDトークンのclaimsからユーザー情報を抽出してセッションに保存
-10. ユーザーを認証済み状態としてアプリを表示
+2. アプリがCSRF対策用のnonceを生成
+3. nonceをブラウザCookieに保存（components.html経由でJavaScript実行）
+4. HMAC署名付きstate（nonce.HMAC(nonce, secret)）を生成
+5. Entra IDの認可エンドポイントにstateを付与してリダイレクト
+6. ユーザーがEntra IDでログイン
+7. Entra IDがアプリのリダイレクトURL（/callback）に認可コードとstateを付与してリダイレクト
+8. app.pyがクエリパラメーター（?code=）を検知
+9. Cookieからnonceを取得し、stateのHMAC署名 + nonce一致を検証（CSRF対策）
+10. アプリが認可コードをトークンエンドポイントでIDトークンに交換
+11. MSALがIDトークンを自動検証（署名、iss、aud、exp等）
+12. IDトークンのclaimsからユーザー情報を抽出してセッションに保存
+13. st.rerun()でページを再描画し、認証済み状態を表示
 ```
+
+### CSRF対策: Cookie + HMAC Double Submit方式
+
+Streamlitでは外部IdPへのリダイレクト（ブラウザのフルページナビゲーション）を挟むと`st.session_state`が失われる（セッションIDが変わるため）。そのため、OAuth stateパラメーターの検証にはブラウザCookieを使用する。
+
+| 項目 | 説明 |
+|------|------|
+| nonce生成 | `secrets.token_urlsafe(32)` |
+| 署名 | `HMAC-SHA256(nonce, client_secret)` |
+| stateパラメーター | `nonce.signature` |
+| Cookie保存 | `components.html()` 経由でJavaScript実行 |
+| Cookie読み取り | `st.context.cookies`（Streamlit 1.37+） |
+| 検証 | 署名再計算 + `hmac.compare_digest` による一致確認 |
 
 ### セッション管理
 
-- Streamlitの`st.session_state`を使用
+- Streamlitの`st.session_state`を使用（認証情報の保持）
 - 保存するデータ:
   - `authenticated`: 認証状態（bool）
   - `user`: ユーザー情報（id, name, email）
   - `token_claims`: IDトークンの全claims
-  - `auth_state`: CSRF対策用のstateトークン（認証中のみ）
 
 ### 環境変数
 
@@ -126,12 +163,14 @@
 | AZURE_CLIENT_ID | アプリケーション（クライアント）ID | Yes |
 | AZURE_CLIENT_SECRET | クライアントシークレット | Yes |
 | AZURE_TENANT_ID | ディレクトリ（テナント）ID | Yes |
-| AZURE_REDIRECT_URI | リダイレクトURI | No（デフォルト: http://localhost:8501/callback） |
-| ENV | 環境識別子（productionで環境変数から読み込み、それ以外は.envから読み込み） | No |
+| AZURE_REDIRECT_URI | リダイレクトURI | No（デフォルト: `http://localhost:8501/callback`） |
+| SSL_CA_FILE | カスタムCA証明書ファイル | No |
+| ENV | 環境識別子（`production`で環境変数から読み込み、それ以外は.envから読み込み） | No |
 
 ### セキュリティ考慮事項
 
-- CSRF対策: stateパラメータによる検証
+- CSRF対策: Cookie + HMAC Double Submit方式によるstateパラメーター検証
 - IDトークン検証: MSALによる自動検証（署名、発行者、対象者、有効期限）
 - 環境変数分離: 開発環境は.envファイルのみ、本番環境は環境変数のみから設定を読み込み
 - クライアントシークレット: サーバーサイドで安全に管理（ConfidentialClientApplication使用）
+- Cookie属性: SameSite=Lax、HTTPS環境ではSecureフラグ付加、10分のTTL

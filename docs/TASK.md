@@ -19,6 +19,9 @@
 | TASK-013 | ✅     | 環境変数読み込み分離（開発:.env/本番:環境変数）     | TASK-003                            |
 | TASK-014 | ✅     | パッケージ名変更（entra_id_auth_example）           | -                                   |
 | TASK-015 | ✅     | README更新                                          | TASK-014                            |
+| TASK-016 | ✅     | CSRF対策をCookie+HMAC Double Submit方式に変更       | TASK-004                            |
+| TASK-017 | ✅     | st.navigation() APIへの移行                         | TASK-008,TASK-016                   |
+| TASK-018 | ✅     | ドキュメント最新化                                  | TASK-016,TASK-017                   |
 
 ## Task Details
 
@@ -78,3 +81,36 @@
 ### TASK-014
 
 - 備考: streamlit_entra_auth → entra_id_auth_example
+
+### TASK-016
+
+- 課題: 外部IdPリダイレクト時にst.session_stateが失われる（セッションIDが変わるため）
+- 対策: OAuth stateの検証にsession_stateではなくブラウザCookieを使用
+- 方式: Cookie + HMAC Double Submit
+  - ログイン時にnonceを生成し、Cookieに保存
+  - HMAC-SHA256(nonce, client_secret)で署名し、stateパラメーターとして使用
+  - コールバック時にst.context.cookiesでnonceを取得し、HMAC検証
+- Cookie設定: components.html()（sandboxed iframe、allow-same-origin）でJavaScript実行
+- リダイレクト: st.markdown() meta refreshで実行（iframeはallow-top-navigationなし）
+- テスト: _create_signed_state, _verify_stateのユニットテスト追加
+
+### TASK-017
+
+- 課題: ファイルベースマルチページでは pages/ 内の全ファイルがサイドバーに表示される
+- 対策: st.navigation() APIに移行し、表示ページを明示的に制御
+- 変更点:
+  - app.py: エントリポイント/ルーターに変更（共通レイアウト + st.navigation）
+  - pages/home.py: 新規作成（旧app.pyのメインコンテンツを移動）
+  - pages/callback.py: 削除（OAuthコールバックはapp.pyで直接処理）
+  - 各ページ: st.set_page_config(), render_sidebar_account(), render_site_header()を削除
+  - pyproject.toml: streamlit>=1.37.0に更新
+- redirect_uri: /callback（Entra IDからのリダイレクト先。app.pyで?code=を検知して処理）
+
+### TASK-018
+
+- 更新対象: README.md, CLAUDE.md, ARCHITECTURE.md, REQUIREMENTS.md, SPECIFICATION.md, TASK.md
+- 主な更新内容:
+  - CSRF対策方式の記載追加（Cookie + HMAC Double Submit）
+  - st.navigation() APIへの移行に伴うアーキテクチャ記載の更新
+  - ディレクトリ構成の最新化（pages/home.py追加、callback.py削除）
+  - redirect_uri、公開API一覧、セッション管理の説明を更新

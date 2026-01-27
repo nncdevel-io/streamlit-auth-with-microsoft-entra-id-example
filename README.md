@@ -8,6 +8,8 @@ StreamlitアプリケーションにMicrosoft Entra ID（旧Azure AD）認証を
 - IDトークンからのユーザー情報取得
 - ログイン・ログアウト機能
 - 認証必須ページのガード機能
+- Cookie + HMAC署名によるCSRF対策（Double Submit方式）
+- `st.navigation()` APIによるマルチページ構成
 
 ## 必要条件
 
@@ -64,34 +66,60 @@ make run
 
 ブラウザで `http://localhost:8501` にアクセスします。
 
+## アーキテクチャ
+
+### マルチページ構成
+
+`st.navigation()` APIを使用し、`app.py` がルーター兼共通レイアウトとして機能します。
+
+```bash
+app.py              # エントリポイント（ルーター + 共通レイアウト + OAuthコールバック処理）
+pages/
+├── home.py         # ホームページ（ログイン/ユーザー情報表示）
+├── about.py        # Aboutページ（認証不要）
+├── dashboard.py    # ダッシュボード（認証必須）
+└── profile.py      # プロファイル（認証必須）
+```
+
+### 認証フロー
+
+1. ユーザーがログインボタンを押す
+2. Cookie にnonceを設定し、HMAC署名付きstateをパラメーターとしてEntra IDへリダイレクト
+3. Entra IDで認証後、認可コード付きでアプリにリダイレクト
+4. `app.py` がコールバックを検知（`?code=`）し、state/Cookie検証後にトークン交換
+5. セッションに認証情報を保存し、ホームページを表示
+
 ## 使用例
 
-### 基本的な使用例
+### 基本的な使用例（エントリポイント）
 
 ```python
 import streamlit as st
 from entra_id_auth_example import (
-    get_current_user,
     handle_callback,
-    is_authenticated,
-    login,
-    logout,
+    render_sidebar_account,
+    render_site_header,
 )
 
-# コールバック処理（URLに?code=...がある場合）
-handle_callback()
+st.set_page_config(page_title="My App", page_icon="🔐")
 
-# メインページ
-if is_authenticated():
-    user = get_current_user()
-    st.write(f"ようこそ、{user['name']}さん")
+# OAuthコールバック処理
+if "code" in st.query_params:
+    if handle_callback():
+        st.rerun()
+    else:
+        st.stop()
 
-    if st.button("ログアウト"):
-        logout()
-else:
-    st.write("ログインしてください")
-    if st.button("ログイン"):
-        login()
+# 共通レイアウト
+render_sidebar_account()
+render_site_header()
+
+# ページ定義
+pg = st.navigation([
+    st.Page("pages/home.py", title="Home", default=True),
+    st.Page("pages/about.py", title="About"),
+])
+pg.run()
 ```
 
 ### 認証必須ページ
@@ -124,6 +152,7 @@ make clean        # キャッシュ削除
 
 - [要件定義書](docs/REQUIREMENTS.md)
 - [アーキテクチャ設計書](docs/ARCHITECTURE.md)
+- [アプリケーション仕様書](docs/SPECIFICATION.md)
 
 ## ライセンス
 
