@@ -150,9 +150,9 @@ make clean        # キャッシュ削除
 
 ## ドキュメント
 
-- [要件定義書](docs/REQUIREMENTS.md)
-- [アーキテクチャ設計書](docs/ARCHITECTURE.md)
-- [アプリケーション仕様書](docs/SPECIFICATION.md)
+- [要件定義書](docs/requirements.md)
+- [アーキテクチャ設計書](docs/architecture.md)
+- [アプリケーション仕様書](docs/specification.md)
 
 ## ライセンス
 

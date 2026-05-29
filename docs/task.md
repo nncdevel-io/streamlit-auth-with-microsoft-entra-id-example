@@ -92,7 +92,7 @@
   - コールバック時にst.context.cookiesでnonceを取得し、HMAC検証
 - Cookie設定: components.html()（sandboxed iframe、allow-same-origin）でJavaScript実行
 - リダイレクト: st.markdown() meta refreshで実行（iframeはallow-top-navigationなし）
-- テスト: _create_signed_state, _verify_stateのユニットテスト追加
+- テスト: _create_signed_state,_verify_stateのユニットテスト追加
 
 ### TASK-017
 

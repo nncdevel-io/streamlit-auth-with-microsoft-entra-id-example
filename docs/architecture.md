@@ -1,7 +1,7 @@
 # Streamlit Entra ID Authentication - アーキテクチャ設計書
 
 | 項目 | 内容 |
-|------|------|
+| ------ | ------ |
 | バージョン | 0.2.0 |
 | 作成日 | 2026年1月24日 |
 | 更新日 | 2026年1月27日 |
@@ -12,7 +12,7 @@
 
 ### 1.1 認証フロー
 
-```
+```text
 ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
 │   Browser   │      │  Streamlit  │      │  Entra ID   │
 │             │      │    App      │      │             │
@@ -62,7 +62,7 @@
 ### 1.2 技術スタック
 
 | コンポーネント | 技術 |
-|---------------|------|
+| --------------- | ------ |
 | フレームワーク | Streamlit >=1.37.0 |
 | マルチページ | `st.navigation()` API |
 | 認証プロトコル | OpenID Connect (OIDC) |
@@ -91,7 +91,7 @@ session_stateではなくブラウザCookieを使用する。
 
 ## 2. ディレクトリ構成
 
-```
+```text
 streamlit-entra-auth/
 ├── src/
 │   └── entra_id_auth_example/
@@ -142,7 +142,7 @@ streamlit-entra-auth/
 環境変数または`.env`ファイルで設定を管理する。
 
 | 環境変数 | 説明 | 例 |
-|---------|------|-----|
+| --------- | ------ | ----- |
 | `AZURE_CLIENT_ID` | アプリケーション（クライアント）ID | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
 | `AZURE_CLIENT_SECRET` | クライアントシークレット | `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` |
 | `AZURE_TENANT_ID` | ディレクトリ（テナント）ID | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
@@ -354,7 +354,7 @@ pg = st.navigation([...])
 pg.run()
 ```
 
-### 4.5 __init__.py
+### 4.5 **init**.py
 
 公開APIのエクスポート。
 
