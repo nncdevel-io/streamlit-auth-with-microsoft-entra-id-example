@@ -76,14 +76,14 @@
 OAuth認証フローのCSRF対策として、Cookie + HMAC Double Submit方式を採用する。
 
 **背景**: Streamlitでは外部IdPへのリダイレクト（ブラウザのフルページナビゲーション）を挟むと
-`st.session_state` が失われる（セッションIDが変わるため）。そのため、stateパラメータの検証に
+`st.session_state` が失われる（セッションIDが変わるため）。そのため、stateパラメーターの検証に
 session_stateではなくブラウザCookieを使用する。
 
 **フロー:**
 
 1. ログイン時: ランダムなnonceを生成し、`HMAC-SHA256(nonce, client_secret)` で署名
 2. nonceをブラウザCookieに保存（`components.html()` でJavaScript実行）
-3. `nonce.signature` をOAuthのstateパラメータとして使用
+3. `nonce.signature` をOAuthのstateパラメーターとして使用
 4. コールバック時: `st.context.cookies` でCookieからnonceを取得
 5. stateのHMAC署名を再計算し、署名一致 + nonce一致を検証
 
@@ -135,7 +135,7 @@ streamlit-entra-auth/
 
 ---
 
-## 3. インターフェース仕様
+## 3. インターフェイズ仕様
 
 ### 3.1 設定
 
@@ -313,7 +313,7 @@ class EntraAuthClient:
 
 ### 4.3 handlers.py
 
-Streamlit統合の認証ハンドラとUIコンポーネント。
+Streamlit統合の認証ハンドラーとUIコンポーネント。
 
 ```python
 # 認証フロー

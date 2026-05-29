@@ -171,6 +171,6 @@ Streamlitでは外部IdPへのリダイレクト（ブラウザのフルペー�
 
 - CSRF対策: Cookie + HMAC Double Submit方式によるstateパラメーター検証
 - IDトークン検証: MSALによる自動検証（署名、発行者、対象者、有効期限）
-- 環境変数分離: 開発環境は.envファイルのみ、本番環境は環境変数のみから設定を読み込み
+- 環境変数分離: 開発環境は```.env```ファイルのみ、本番環境は環境変数のみから設定を読み込み
 - クライアントシークレット: サーバーサイドで安全に管理（ConfidentialClientApplication使用）
 - Cookie属性: SameSite=Lax、HTTPS環境ではSecureフラグ付加、10分のTTL

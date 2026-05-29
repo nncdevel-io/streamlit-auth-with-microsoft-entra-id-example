@@ -104,7 +104,7 @@
   - pages/callback.py: 削除（OAuthコールバックはapp.pyで直接処理）
   - 各ページ: st.set_page_config(), render_sidebar_account(), render_site_header()を削除
   - pyproject.toml: streamlit>=1.37.0に更新
-- redirect_uri: /callback（Entra IDからのリダイレクト先。app.pyで?code=を検知して処理）
+- redirect_uri: /callback（Entra IDからのリダイレクト先。app.pyで```?code=```を検知して処理）
 
 ### TASK-018
 

@@ -2,11 +2,17 @@
   "version": "0.2",
   "language": "en",
   "words": [
+    "dataclass",
     "HMAC",
     "MSAL",
+    "PKCE",
+    "pyenv",
     "pyproject",
+    "pytest",
+    "sandboxed",
     "Streamlit",
-    "textlintrc"
+    "textlintrc",
+    "urlsafe"
   ],
   "ignorePaths": [
     ".*",
