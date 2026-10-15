@@ -153,6 +153,11 @@ make clean        # キャッシュ削除
 - [要件定義書](docs/requirements.md)
 - [アーキテクチャ設計書](docs/architecture.md)
 - [アプリケーション仕様書](docs/specification.md)
+- [初期開発のタスク一覧](docs/task.md)
+- [作業計画](docs/work/task.md)
+
+本リポジトリは、AIを使った開発のサンプルも兼ねています。
+`docs/task.md`は、AIを使った初期開発で用いたタスク一覧です。
 
 ## ライセンス
 
