@@ -169,9 +169,7 @@ def handle_callback() -> bool:
         return False
 
     logger.info("[callback] コールバック検出 (セッション=%s)", session_id)
-    logger.info(
-        "[callback] session_stateのキー: %s", list(st.session_state.keys())
-    )
+    logger.info("[callback] session_stateのキー: %s", list(st.session_state.keys()))
 
     code = query_params.get("code")
     state = query_params.get("state")
@@ -227,9 +225,7 @@ def handle_callback() -> bool:
         "email": claims.get("email") or claims.get("preferred_username", ""),
     }
 
-    logger.info(
-        "[callback] 認証成功: user=%s (セッション=%s)", user_info["name"], session_id
-    )
+    logger.info("[callback] 認証成功: user=%s (セッション=%s)", user_info["name"], session_id)
 
     # セッションステートに保存
     st.session_state[_AUTHENTICATED_KEY] = True
@@ -450,9 +446,7 @@ def render_sidebar_account() -> None:
             "display: flex; align-items: center; justify-content: center; "
             "color: white; font-weight: bold; font-size: 14px;"
         )
-        container_style = (
-            "display: flex; align-items: center; gap: 12px; padding: 8px 0;"
-        )
+        container_style = "display: flex; align-items: center; gap: 12px; padding: 8px 0;"
 
         st.markdown("---")
         st.markdown(
@@ -460,8 +454,8 @@ def render_sidebar_account() -> None:
             <div style="{container_style}">
                 <div style="{avatar_style}">{initials}</div>
                 <div style="flex: 1; min-width: 0;">
-                    <div style="{name_style}">{user['name']}</div>
-                    <div style="{email_style}">{user['email']}</div>
+                    <div style="{name_style}">{user["name"]}</div>
+                    <div style="{email_style}">{user["email"]}</div>
                 </div>
             </div>
             """,

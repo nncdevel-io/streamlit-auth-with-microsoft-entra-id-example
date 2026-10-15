@@ -25,7 +25,7 @@ install:
 
 # Install with dev dependencies
 install-dev:
-	uv sync --dev --extra docs
+	uv sync --extra docs
 
 # Run the application
 run:

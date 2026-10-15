@@ -9,20 +9,23 @@ dependencies = [
     "streamlit>=1.37.0",
     "msal>=1.26.0",
     "python-dotenv>=1.2.2",
+    "requests>=2.33.0",
 ]
 
 [project.optional-dependencies]
+docs = [
+    "sphinx>=7.0.0",
+    "sphinx-rtd-theme>=2.0.0",
+    "sphinx-autodoc-typehints>=2.0.0",
+]
+
+[dependency-groups]
 dev = [
     "pytest>=9.0.3",
     "pytest-cov>=4.1.0",
     "ruff>=0.1.0",
     "mypy>=1.8.0",
     "types-requests>=2.31.0",
-]
-docs = [
-    "sphinx>=7.0.0",
-    "sphinx-rtd-theme>=2.0.0",
-    "sphinx-autodoc-typehints>=2.0.0",
 ]
 
 [build-system]
