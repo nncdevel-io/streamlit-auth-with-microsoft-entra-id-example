@@ -105,7 +105,8 @@ def login() -> None:
     logger.info("[login] state生成: nonce=%s (セッション=%s)", nonce[:16] + "...", session_id)
 
     # 認可URLを取得
-    auth_url = client.get_auth_url(state)
+    # stateのnonceをOIDCのnonceにも使い、IDトークンをこのブラウザーのCookieに結び付ける
+    auth_url = client.get_auth_url(state, nonce)
     logger.info("[login] Entra IDへリダイレクト (セッション=%s)", session_id)
 
     # Cookie設定 → リダイレクト（2段階で実行）
@@ -190,7 +191,7 @@ def handle_callback() -> bool:
         session_id,
     )
     config = load_config()
-    if not _verify_state(state, cookie_nonce, config.client_secret):
+    if cookie_nonce is None or not _verify_state(state, cookie_nonce, config.client_secret):
         logger.warning(
             "[callback] state検証失敗: cookie=%s, state=%s (セッション=%s)",
             "未設定" if not cookie_nonce else "設定済",
@@ -209,7 +210,7 @@ def handle_callback() -> bool:
     # 認可コードをトークンに交換
     client = _get_client()
     logger.info("[callback] トークン交換開始 (セッション=%s)", session_id)
-    result = client.acquire_token_by_code(code)
+    result = client.acquire_token_by_code(code, nonce=cookie_nonce)
 
     if "error" in result:
         error_desc = result.get("error_description", result.get("error", "Unknown error"))
@@ -275,11 +276,11 @@ def require_auth() -> None:
 def get_token_claims() -> dict[str, Any] | None:
     """生のIDトークンclaimsを取得する。
 
-    claimsはMSALによって検証済み:
+    claimsはEntraAuthClient.validate_id_token()で検証済み:
     - JWKSを使用した署名検証
-    - authorityに対する発行者（iss）の検証
+    - OIDCメタデータのissuerに対する発行者（iss）の検証
     - client_idに対する対象者（aud）の検証
-    - 有効期限（exp）、nbf、iatの検証
+    - 有効期限（exp）、nbf、iat、nonceの検証
 
     Returns:
         sub、name、email、iss、aud、expなどを含む生のIDトークンclaims。
@@ -392,7 +393,6 @@ def render_sidebar_account() -> None:
             """
             <style>
                 [data-testid="stSidebar"] { display: none; }
-                [data-testid="stSidebarCollapsedControl"] { display: none; }
             </style>
             """,
             unsafe_allow_html=True,
@@ -462,5 +462,5 @@ def render_sidebar_account() -> None:
             unsafe_allow_html=True,
         )
 
-        if st.button("ログアウト", key="sidebar_logout", use_container_width=True):
+        if st.button("ログアウト", key="sidebar_logout", width="stretch"):
             logout()

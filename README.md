@@ -115,10 +115,12 @@ render_sidebar_account()
 render_site_header()
 
 # ページ定義
-pg = st.navigation([
-    st.Page("pages/home.py", title="Home", default=True),
-    st.Page("pages/about.py", title="About"),
-])
+pg = st.navigation(
+    [
+        st.Page("pages/home.py", title="Home", default=True),
+        st.Page("pages/about.py", title="About"),
+    ]
+)
 pg.run()
 ```
 

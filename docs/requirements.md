@@ -86,7 +86,7 @@ IDトークンのクレームから以下の情報を取得する。
 | 項目 | 要件 |
 | ------ | ------ |
 | Python バージョン | 3.13以上 |
-| Streamlit バージョン | 1.37.0以上（`st.navigation()`, `st.context.cookies`） |
+| Streamlit バージョン | 1.66.0以上 |
 | 依存関係 | `streamlit`, `msal`, `python-dotenv`（pyproject.tomlで管理） |
 | セキュリティ | クライアントシークレットは環境変数で管理、コードにハードコードしない |
 | CSRF対策 | Cookie + HMAC Double Submit方式（セッション依存なし） |

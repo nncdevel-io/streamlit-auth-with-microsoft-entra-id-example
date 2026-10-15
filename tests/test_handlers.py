@@ -250,6 +250,7 @@ class TestHandleCallback:
         assert result is True
         assert mock_st.session_state["authenticated"] is True
         assert mock_st.session_state["user"]["id"] == "user-123"
+        mock_client.acquire_token_by_code.assert_called_once_with("auth-code", nonce=nonce)
 
 
 class TestRequireAuth:

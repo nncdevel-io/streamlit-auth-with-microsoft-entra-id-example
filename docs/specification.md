@@ -19,7 +19,7 @@
 
 | 項目 | 技術 |
 | ------ | ------ |
-| フレームワーク | Streamlit >=1.37.0 |
+| フレームワーク | Streamlit >=1.66.0 |
 | マルチページ | `st.navigation()` API |
 | 認証プロトコル | OpenID Connect (OIDC) |
 | IdP | Microsoft Entra ID |
@@ -124,13 +124,13 @@ app.py（エントリポイント）
 2. アプリがCSRF対策用のnonceを生成
 3. nonceをブラウザCookieに保存（components.html経由でJavaScript実行）
 4. HMAC署名付きstate（nonce.HMAC(nonce, secret)）を生成
-5. Entra IDの認可エンドポイントにstateを付与してリダイレクト
+5. Entra IDの認可エンドポイントにstateとnonceを付与してリダイレクト
 6. ユーザーがEntra IDでログイン
 7. Entra IDがアプリのリダイレクトURL（/callback）に認可コードとstateを付与してリダイレクト
 8. app.pyがクエリパラメーター（?code=）を検知
 9. Cookieからnonceを取得し、stateのHMAC署名 + nonce一致を検証（CSRF対策）
 10. アプリが認可コードをトークンエンドポイントでIDトークンに交換
-11. MSALがIDトークンを自動検証（署名、iss、aud、exp等）
+11. アプリがPyJWTでIDトークンを検証（署名、iss、aud、exp、nbf、iat、nonce）
 12. IDトークンのclaimsからユーザー情報を抽出してセッションに保存
 13. st.rerun()でページを再描画し、認証済み状態を表示
 ```
@@ -170,7 +170,7 @@ Streamlitでは外部IdPへのリダイレクト（ブラウザのフルペー�
 ### セキュリティ考慮事項
 
 - CSRF対策: Cookie + HMAC Double Submit方式によるstateパラメーター検証
-- IDトークン検証: MSALによる自動検証（署名、発行者、対象者、有効期限）
+- IDトークン検証: PyJWTによる検証（署名、発行者、対象者、有効期限、nonce）。MSAL 1.38.0以降はIDトークンを検証しないため、アプリ側で検証する
 - 環境変数分離: 開発環境は```.env```ファイルのみ、本番環境は環境変数のみから設定を読み込み
 - クライアントシークレット: サーバーサイドで安全に管理（ConfidentialClientApplication使用）
 - Cookie属性: SameSite=Lax、HTTPS環境ではSecureフラグ付加、10分のTTL
