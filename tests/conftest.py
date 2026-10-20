@@ -13,4 +13,5 @@ def auth_config() -> AuthConfig:
         client_secret="test-secret",
         tenant_id="test-tenant-id",
         redirect_uri="http://localhost:8501/callback",
+        cookie_secret="test-cookie-secret",
     )

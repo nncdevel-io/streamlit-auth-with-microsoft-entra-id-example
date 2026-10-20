@@ -6,7 +6,7 @@ import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
-from urllib.parse import urlencode
+from typing import Any
 
 from dotenv import dotenv_values
 
@@ -22,12 +22,15 @@ class AuthConfig:
         client_secret: 証明書とシークレットのクライアントシークレット。
         tenant_id: ディレクトリ（テナント）ID。
         redirect_uri: アプリ登録で設定したリダイレクトURI。
+        cookie_secret: Streamlitが認証Cookieの署名に使うシークレット。
+        ssl_ca_file: Entra IDとのHTTPS通信で信頼するCA証明書ファイルのパス。
     """
 
     client_id: str
     client_secret: str
     tenant_id: str
     redirect_uri: str
+    cookie_secret: str
     ssl_ca_file: str | None = None
 
     @property
@@ -36,22 +39,27 @@ class AuthConfig:
         return f"https://login.microsoftonline.com/{self.tenant_id}"
 
     @property
-    def base_url(self) -> str:
-        """アプリケーションのベースURL（パスなし）を返す。"""
-        from urllib.parse import urlparse
+    def server_metadata_url(self) -> str:
+        """テナントのOIDCメタデータのURLを返す。"""
+        return f"{self.authority}/v2.0/.well-known/openid-configuration"
 
-        parsed = urlparse(self.redirect_uri)
-        return f"{parsed.scheme}://{parsed.netloc}/"
+    def to_streamlit_secrets(self) -> dict[str, Any]:
+        """st.login()が読み込む形式のsecretsを返す。
 
-    @property
-    def logout_url(self) -> str:
-        """Entra IDのログアウトURLを返す。
-
-        ログアウト後、ユーザーはアプリケーションのベースURLにリダイレクトされる。
+        st.App(secrets=...)に渡し、st.secrets["auth"]として参照させる。
+        SSL_CA_FILEを指定した場合は、AuthlibがEntra IDとの通信に使うhttpxへ
+        verifyとして渡す。
         """
-        base_logout_url = f"{self.authority}/oauth2/v2.0/logout"
-        params = urlencode({"post_logout_redirect_uri": self.base_url})
-        return f"{base_logout_url}?{params}"
+        auth: dict[str, Any] = {
+            "redirect_uri": self.redirect_uri,
+            "cookie_secret": self.cookie_secret,
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "server_metadata_url": self.server_metadata_url,
+        }
+        if self.ssl_ca_file:
+            auth["client_kwargs"] = {"verify": self.ssl_ca_file}
+        return {"auth": auth}
 
 
 def _get_config_values() -> Mapping[str, str | None]:
@@ -85,6 +93,7 @@ def load_config() -> AuthConfig:
     client_secret = values.get("AZURE_CLIENT_SECRET")
     tenant_id = values.get("AZURE_TENANT_ID")
     redirect_uri = values.get("AZURE_REDIRECT_URI") or "http://localhost:8501/callback"
+    cookie_secret = values.get("AUTH_COOKIE_SECRET")
     ssl_ca_file = values.get("SSL_CA_FILE") or None
 
     missing: list[str] = []
@@ -94,6 +103,8 @@ def load_config() -> AuthConfig:
         missing.append("AZURE_CLIENT_SECRET")
     if not tenant_id:
         missing.append("AZURE_TENANT_ID")
+    if not cookie_secret:
+        missing.append("AUTH_COOKIE_SECRET")
 
     if missing:
         raise ValueError(f"Missing required configuration: {', '.join(missing)}")
@@ -102,11 +113,13 @@ def load_config() -> AuthConfig:
     assert client_id is not None
     assert client_secret is not None
     assert tenant_id is not None
+    assert cookie_secret is not None
 
     return AuthConfig(
         client_id=client_id,
         client_secret=client_secret,
         tenant_id=tenant_id,
         redirect_uri=redirect_uri,
+        cookie_secret=cookie_secret,
         ssl_ca_file=ssl_ca_file,
     )

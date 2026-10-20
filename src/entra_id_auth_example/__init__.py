@@ -4,12 +4,10 @@ Microsoft Entra ID（旧Azure AD）を使用したStreamlitアプリケーショ
 認証ユーティリティを提供します。
 """
 
-from .client import EntraAuthClient
 from .config import AuthConfig, load_config
 from .handlers import (
     get_current_user,
     get_token_claims,
-    handle_callback,
     is_authenticated,
     login,
     logout,
@@ -20,10 +18,8 @@ from .handlers import (
 
 __all__ = [
     "AuthConfig",
-    "EntraAuthClient",
     "get_current_user",
     "get_token_claims",
-    "handle_callback",
     "is_authenticated",
     "load_config",
     "login",

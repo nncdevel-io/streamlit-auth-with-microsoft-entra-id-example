@@ -25,11 +25,11 @@ install:
 
 # Install with dev dependencies
 install-dev:
-	uv sync --dev --extra docs
+	uv sync --extra docs
 
 # Run the application
 run:
-	uv run streamlit run src/entra_id_auth_example/app.py
+	uv run streamlit run src/entra_id_auth_example/server.py
 
 # Run tests
 test:
