@@ -18,29 +18,55 @@ class TestAuthConfig:
             client_secret="test-secret",
             tenant_id="test-tenant-id",
             redirect_uri="http://localhost:8501/callback",
+            cookie_secret="test-cookie-secret",
         )
         assert config.authority == "https://login.microsoftonline.com/test-tenant-id"
 
-    def test_base_url(self) -> None:
-        """Test base_url property extracts base URL from redirect_uri."""
+    def test_server_metadata_url(self) -> None:
+        """Test server_metadata_url points to the tenant's v2.0 OIDC metadata."""
         config = AuthConfig(
             client_id="test-client-id",
             client_secret="test-secret",
             tenant_id="test-tenant-id",
             redirect_uri="http://localhost:8501/callback",
+            cookie_secret="test-cookie-secret",
         )
-        assert config.base_url == "http://localhost:8501/"
+        assert config.server_metadata_url == (
+            "https://login.microsoftonline.com/test-tenant-id/v2.0/.well-known/openid-configuration"
+        )
 
-    def test_logout_url(self) -> None:
-        """Test logout_url property includes post_logout_redirect_uri."""
+    def test_to_streamlit_secrets(self) -> None:
+        """Test to_streamlit_secrets returns the [auth] section for st.login()."""
         config = AuthConfig(
             client_id="test-client-id",
             client_secret="test-secret",
             tenant_id="test-tenant-id",
             redirect_uri="http://localhost:8501/callback",
+            cookie_secret="test-cookie-secret",
         )
-        assert "oauth2/v2.0/logout" in config.logout_url
-        assert "post_logout_redirect_uri" in config.logout_url
+        assert config.to_streamlit_secrets() == {
+            "auth": {
+                "redirect_uri": "http://localhost:8501/callback",
+                "cookie_secret": "test-cookie-secret",
+                "client_id": "test-client-id",
+                "client_secret": "test-secret",
+                "server_metadata_url": config.server_metadata_url,
+            }
+        }
+
+    def test_to_streamlit_secrets_with_ca_file(self) -> None:
+        """Test SSL_CA_FILE is passed to httpx as verify via client_kwargs."""
+        config = AuthConfig(
+            client_id="test-client-id",
+            client_secret="test-secret",
+            tenant_id="test-tenant-id",
+            redirect_uri="http://localhost:8501/callback",
+            cookie_secret="test-cookie-secret",
+            ssl_ca_file="/path/to/ca.pem",
+        )
+        assert config.to_streamlit_secrets()["auth"]["client_kwargs"] == {
+            "verify": "/path/to/ca.pem"
+        }
 
     def test_frozen_dataclass(self) -> None:
         """Test that AuthConfig is immutable."""
@@ -49,6 +75,7 @@ class TestAuthConfig:
             client_secret="test-secret",
             tenant_id="test-tenant-id",
             redirect_uri="http://localhost:8501/callback",
+            cookie_secret="test-cookie-secret",
         )
         with pytest.raises(AttributeError):
             config.client_id = "new-id"  # type: ignore[misc]
@@ -64,6 +91,7 @@ class TestLoadConfigProduction:
             "AZURE_CLIENT_ID": "test-client-id",
             "AZURE_CLIENT_SECRET": "test-secret",
             "AZURE_TENANT_ID": "test-tenant-id",
+            "AUTH_COOKIE_SECRET": "test-cookie-secret",
             "AZURE_REDIRECT_URI": "http://localhost:8501/callback",
         }
         with patch.dict(os.environ, env_vars, clear=True):
@@ -80,6 +108,7 @@ class TestLoadConfigProduction:
             "AZURE_CLIENT_ID": "test-client-id",
             "AZURE_CLIENT_SECRET": "test-secret",
             "AZURE_TENANT_ID": "test-tenant-id",
+            "AUTH_COOKIE_SECRET": "test-cookie-secret",
         }
         with patch.dict(os.environ, env_vars, clear=True):
             config = load_config()
@@ -96,6 +125,7 @@ class TestLoadConfigDevelopment:
             "AZURE_CLIENT_ID": "dev-client-id",
             "AZURE_CLIENT_SECRET": "dev-secret",
             "AZURE_TENANT_ID": "dev-tenant-id",
+            "AUTH_COOKIE_SECRET": "dev-cookie-secret",
             "AZURE_REDIRECT_URI": "http://localhost:8501/callback",
         }
         # Ensure ENV is not set to production
@@ -115,6 +145,7 @@ class TestLoadConfigDevelopment:
             assert "AZURE_CLIENT_ID" in error_msg
             assert "AZURE_CLIENT_SECRET" in error_msg
             assert "AZURE_TENANT_ID" in error_msg
+            assert "AUTH_COOKIE_SECRET" in error_msg
 
     @patch("entra_id_auth_example.config.dotenv_values")
     def test_ignores_env_vars_in_dev(self, mock_dotenv: patch) -> None:
@@ -123,6 +154,7 @@ class TestLoadConfigDevelopment:
             "AZURE_CLIENT_ID": "from-dotenv",
             "AZURE_CLIENT_SECRET": "secret",
             "AZURE_TENANT_ID": "tenant",
+            "AUTH_COOKIE_SECRET": "cookie-secret",
         }
         # Set env var that should be ignored
         with patch.dict(os.environ, {"AZURE_CLIENT_ID": "from-env"}, clear=True):

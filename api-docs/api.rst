@@ -13,12 +13,12 @@ Config
    :undoc-members:
    :show-inheritance:
 
-Client
-------
+Callback
+--------
 
-MSAL クライアントラッパー。
+st.login() のコールバックへの転送ルート。
 
-.. automodule:: entra_id_auth_example.client
+.. automodule:: entra_id_auth_example.callback
    :members:
    :undoc-members:
    :show-inheritance:

@@ -2,9 +2,9 @@
 
 | 項目 | 内容 |
 | ------ | ------ |
-| バージョン | 0.2.0 |
+| バージョン | 0.3.0 |
 | 作成日 | 2026年1月24日 |
-| 更新日 | 2026年1月27日 |
+| 更新日 | 2026年10月20日 |
 
 ---
 
@@ -13,50 +13,33 @@
 ### 1.1 認証フロー
 
 ```text
-┌─────────────┐      ┌─────────────┐      ┌─────────────┐
-│   Browser   │      │  Streamlit  │      │  Entra ID   │
-│             │      │    App      │      │             │
-└──────┬──────┘      └──────┬──────┘      └──────┬──────┘
-       │                    │                    │
-       │  1. アクセス       │                    │
-       │───────────────────>│                    │
-       │                    │                    │
-       │  2. 未認証→ログインボタン表示           │
-       │<───────────────────│                    │
-       │                    │                    │
-       │  3. ログインボタン押下                  │
-       │───────────────────>│                    │
-       │                    │                    │
-       │  4. Cookie設定（nonce）+ リダイレクト   │
-       │<───────────────────│                    │
-       │                    │                    │
-       │  5. 認証リクエスト（state=nonce.HMAC）  │
-       │────────────────────────────────────────>│
-       │                    │                    │
-       │  6. ログイン画面                        │
-       │<────────────────────────────────────────│
-       │                    │                    │
-       │  7. 認証情報入力                        │
-       │────────────────────────────────────────>│
-       │                    │                    │
-       │  8. 認可コード＋state付きリダイレクト   │
-       │<────────────────────────────────────────│
-       │                    │                    │
-       │  9. コールバック（?code=&state=）        │
-       │───────────────────>│                    │
-       │                    │                    │
-       │                    │ 10. Cookie nonce +  │
-       │                    │     state HMAC検証  │
-       │                    │                    │
-       │                    │ 11. トークン交換    │
-       │                    │───────────────────>│
-       │                    │                    │
-       │                    │ 12. ID Token       │
-       │                    │<───────────────────│
-       │                    │                    │
-       │ 13. 認証完了       │                    │
-       │<───────────────────│                    │
-       │                    │                    │
+┌─────────────┐   ┌─────────────┐   ┌──────────────────┐   ┌─────────────┐
+│   Browser   │   │  Streamlit  │   │ Streamlit Server │   │  Entra ID   │
+│             │   │    App      │   │   (st.login)     │   │             │
+└──────┬──────┘   └──────┬──────┘   └────────┬─────────┘   └──────┬──────┘
+       │ 1. ログインボタン押下                │                    │
+       │────────────────>│                   │                    │
+       │                 │ 2. st.login()     │                    │
+       │                 │──────────────────>│                    │
+       │ 3. 認証リクエスト（state、nonce）     │                    │
+       │<─────────────────────────────────────│                    │
+       │──────────────────────────────────────────────────────────>│
+       │ 4. ログイン画面・認証情報入力                              │
+       │<─────────────────────────────────────────────────────────>│
+       │ 5. /callback?code=&state= へリダイレクト                   │
+       │<──────────────────────────────────────────────────────────│
+       │ 6. /callback → /oauth2callback へ転送                      │
+       │─────────────────────────────────────>│                    │
+       │                 │                   │ 7. state検証        │
+       │                 │                   │ 8. トークン交換     │
+       │                 │                   │───────────────────>│
+       │                 │                   │ 9. ID Token        │
+       │                 │                   │<───────────────────│
+       │                 │                   │ 10. ID Token検証    │
+       │ 11. HttpOnly Cookie設定 + トップへリダイレクト              │
+       │<─────────────────────────────────────│                    │
+       │ 12. st.user で認証済み表示           │                    │
+       │<────────────────│                   │                    │
 ```
 
 ### 1.2 技術スタック
@@ -64,29 +47,27 @@
 | コンポーネント | 技術 |
 | --------------- | ------ |
 | フレームワーク | Streamlit >=1.66.0 |
+| サーバー起動 | `st.App`（認証設定のsecrets、転送ルート） |
 | マルチページ | `st.navigation()` API |
 | 認証プロトコル | OpenID Connect (OIDC) |
 | IdP | Microsoft Entra ID |
-| OIDCライブラリ | `msal` (Microsoft Authentication Library) |
-| IDトークン検証 | `pyjwt` |
-| CSRF対策 | Cookie + HMAC Double Submit |
-| セッション管理 | `st.session_state`（認証情報の保持） |
+| OIDCライブラリ | `st.login()`（Authlib） |
+| 認証情報の保持 | 署名付きのHttpOnly Cookie（`st.user`で参照） |
 
-### 1.3 CSRF対策: Cookie + HMAC Double Submit方式
+### 1.3 認証方式: st.login()
 
-OAuth認証フローのCSRF対策として、Cookie + HMAC Double Submit方式を採用する。
+Streamlit組み込みの`st.login()`を使用する。stateとnonceの生成・検証、トークン交換、
+IDトークンの検証、認証Cookieの発行はStreamlitサーバー（Authlib）が行う。
 
-**背景**: Streamlitでは外部IdPへのリダイレクト（ブラウザのフルページナビゲーション）を挟むと
-`st.session_state` が失われる（セッションIDが変わるため）。そのため、stateパラメーターの検証に
-session_stateではなくブラウザCookieを使用する。
+**設定の受け渡し**: `st.login()`は`st.secrets["auth"]`を読む。本アプリは`.env`または環境変数から
+読み込んだ設定を、`server.py`で`st.App(secrets=...)`に渡す。
 
-**フロー:**
+**コールバックのパス**: `st.login()`のコールバックは`/oauth2callback`に固定されている。
+Entra IDのアプリ登録で`/callback`を使い続けるため、`/callback`で受けたリクエストを
+クエリパラメーターごと`/oauth2callback`へ転送するルートを`st.App`に追加する。
+トークン交換で送るredirect_uriはログイン開始時の`/callback`のままなので、アプリ登録の変更は不要である。
 
-1. ログイン時: ランダムなnonceを生成し、`HMAC-SHA256(nonce, client_secret)` で署名
-2. nonceをブラウザCookieに保存（`components.html()` でJavaScript実行）
-3. `nonce.signature` をOAuthのstateパラメーターとして使用
-4. コールバック時: `st.context.cookies` でCookieからnonceを取得
-5. stateのHMAC署名を再計算し、署名一致 + nonce一致を検証
+**プロキシー環境**: `SSL_CA_FILE`は、AuthlibがEntra IDとの通信に使うhttpxへ`verify`として渡す。
 
 ---
 
@@ -98,7 +79,8 @@ streamlit-entra-auth/
 │   └── entra_id_auth_example/
 │       ├── __init__.py        # 公開関数のエクスポート
 │       ├── config.py          # 設定管理
-│       ├── client.py          # MSALクライアント
+│       ├── server.py          # サーバー起動設定（st.App）
+│       ├── callback.py        # /callback の転送ルート
 │       ├── handlers.py        # 認証ハンドラ・UIコンポーネント
 │       ├── app.py             # エントリポイント（ルーター + 共通レイアウト）
 │       └── pages/
@@ -110,7 +92,7 @@ streamlit-entra-auth/
 ├── tests/
 │   ├── __init__.py
 │   ├── test_config.py
-│   ├── test_client.py
+│   ├── test_callback.py
 │   └── test_handlers.py
 ├── docs/
 │   ├── REQUIREMENTS.md        # 要件定義書
@@ -147,7 +129,8 @@ streamlit-entra-auth/
 | `AZURE_CLIENT_ID` | アプリケーション（クライアント）ID | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
 | `AZURE_CLIENT_SECRET` | クライアントシークレット | `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` |
 | `AZURE_TENANT_ID` | ディレクトリ（テナント）ID | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
-| `AZURE_REDIRECT_URI` | リダイレクトURI（デフォルト: `http://localhost:8501/`） | `http://localhost:8501/` |
+| `AZURE_REDIRECT_URI` | リダイレクトURI（デフォルト: `http://localhost:8501/callback`） | `http://localhost:8501/callback` |
+| `AUTH_COOKIE_SECRET` | 認証Cookieの署名に使うシークレット | ランダムな文字列 |
 | `SSL_CA_FILE` | カスタムCA証明書ファイル（任意） | `/path/to/ca.pem` |
 | `ENV` | 環境識別子（`production`で環境変数から読み込み） | `production` |
 
@@ -159,30 +142,16 @@ Entra IDのログインページにリダイレクトする。
 
 ```python
 def login() -> None:
-    """認証フローを開始し、Entra IDにリダイレクト"""
+    """st.login()で認証フローを開始し、Entra IDにリダイレクト"""
 ```
 
 #### logout()
 
-セッションをクリアし、Entra IDからログアウトする。
+st.logout()で認証Cookieを削除し、Entra IDからログアウトする。
 
 ```python
 def logout() -> None:
-    """セッションをクリアし、Entra IDのログアウトエンドポイントにリダイレクト"""
-```
-
-#### handle_callback()
-
-認可コードを処理し、トークンを取得する。
-
-```python
-def handle_callback() -> bool:
-    """
-    コールバックURLのクエリパラメータを処理
-
-    Returns:
-        bool: 認証成功時True
-    """
+    """認証Cookieを削除し、Entra IDのログアウトエンドポイントにリダイレクト"""
 ```
 
 #### is_authenticated()
@@ -216,7 +185,7 @@ def get_current_user() -> UserInfo | None:
 ```python
 def get_token_claims() -> dict[str, Any] | None:
     """
-    EntraAuthClient.validate_id_token()で検証済みのIDトークンのclaimsを返す
+    st.login()が検証して保存したIDトークンのclaims（st.user）を返す
 
     Returns:
         dict: sub, name, email, iss, aud, exp等を含むclaims
@@ -256,22 +225,15 @@ def render_sidebar_account() -> None:
     """
 ```
 
-### 3.3 セッションデータ構造
+### 3.3 認証情報の保持
 
-認証成功時、以下のデータを`st.session_state`に格納する。
+認証成功時、`st.login()`がIDトークンのclaimsを署名付きのHttpOnly Cookieに保存する。
+アプリは`st.user`で参照する。
 
 ```python
-st.session_state["authenticated"] = True
-st.session_state["user"] = {
-    "id": "...",
-    "name": "...",
-    "email": "...",
-}
-st.session_state["token_claims"] = {...}  # 生のクレーム
+st.user.is_logged_in  # 認証状態
+st.user.to_dict()     # IDトークンのclaims（sub、name、email、iss、aud、exp等）
 ```
-
-CSRF対策用のstateは`st.session_state`ではなくブラウザCookieで管理する
-（外部IdPへのリダイレクトでセッションが失われるため）。
 
 ---
 
@@ -288,40 +250,46 @@ class AuthConfig:
     client_secret: str
     tenant_id: str
     redirect_uri: str
+    cookie_secret: str
     ssl_ca_file: str | None = None
 
     @property
     def authority(self) -> str: ...
     @property
-    def base_url(self) -> str: ...
-    @property
-    def logout_url(self) -> str: ...
+    def server_metadata_url(self) -> str: ...
+    def to_streamlit_secrets(self) -> dict[str, Any]: ...
 ```
 
-### 4.2 client.py
+### 4.2 server.py
 
-MSALクライアントのラッパー。
+`streamlit run`で起動するファイル。`st.App`に認証設定のsecretsと転送ルートを渡す。
 
 ```python
-class EntraAuthClient:
-    def __init__(self, config: AuthConfig): ...
-    def get_auth_url(self, state: str, nonce: str) -> str: ...
-    def acquire_token_by_code(self, code: str, nonce: str) -> dict: ...
-    def validate_id_token(self, id_token: str, nonce: str) -> dict: ...
+_config = load_config()
 
-    @property
-    def logout_url(self) -> str: ...
+app = st.App(
+    Path(__file__).with_name("app.py"),
+    secrets=_config.to_streamlit_secrets(),
+    routes=create_callback_routes(_config.redirect_uri),
+)
 ```
 
-### 4.3 handlers.py
+### 4.3 callback.py
+
+`AZURE_REDIRECT_URI`のパスで受けたリクエストを`/oauth2callback`へ転送するルートを作成する。
+
+```python
+def create_callback_routes(redirect_uri: str) -> list[Route]: ...
+```
+
+### 4.4 handlers.py
 
 Streamlit統合の認証ハンドラーとUIコンポーネント。
 
 ```python
 # 認証フロー
-def login() -> None: ...
-def logout() -> None: ...
-def handle_callback() -> bool: ...
+def login() -> None: ...   # st.login()
+def logout() -> None: ...  # st.logout()
 
 
 # 認証状態
@@ -334,42 +302,31 @@ def require_auth() -> None: ...
 # UIコンポーネント
 def render_site_header() -> None: ...
 def render_sidebar_account() -> None: ...
-
-
-# 内部: CSRF対策
-def _create_signed_state(secret: str) -> tuple[str, str]: ...
-def _verify_state(state: str | None, cookie_nonce: str | None, secret: str) -> bool: ...
 ```
 
-### 4.4 app.py（エントリポイント）
+### 4.5 app.py（エントリポイント）
 
 `st.navigation()` APIを使用したルーター兼共通レイアウト。
 
 ```python
-# 1. OAuthコールバック処理（st.navigation前に実行）
-if "code" in st.query_params:
-    handle_callback()
-
-# 2. 共通レイアウト
+# 1. 共通レイアウト
 render_sidebar_account()
 render_site_header()
 
-# 3. ページ定義・ルーティング
+# 2. ページ定義・ルーティング
 pg = st.navigation([...])
 pg.run()
 ```
 
-### 4.5 **init**.py
+### 4.6 **init**.py
 
 公開APIのエクスポート。
 
 ```python
 __all__ = [
     "AuthConfig",
-    "EntraAuthClient",
     "get_current_user",
     "get_token_claims",
-    "handle_callback",
     "is_authenticated",
     "load_config",
     "login",

@@ -19,5 +19,5 @@ st.markdown("""
 - **フレームワーク**: Streamlit
 - **認証**: OpenID Connect (OIDC)
 - **IdP**: Microsoft Entra ID
-- **ライブラリ**: MSAL (Microsoft Authentication Library)
+- **ライブラリ**: Streamlit の `st.login()`（Authlib）
 """)

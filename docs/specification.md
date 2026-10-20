@@ -2,8 +2,8 @@
 
 | 項目 | 内容 |
 | ------ | ------ |
-| バージョン | 0.2.0 |
-| 更新日 | 2026年1月27日 |
+| バージョン | 0.3.0 |
+| 更新日 | 2026年10月20日 |
 
 ## アプリケーション概要
 
@@ -12,7 +12,7 @@
 ### 目的
 
 - Streamlitアプリケーションへの企業認証の導入方法を示す
-- MSAL（Microsoft Authentication Library）を使用した安全な認証フローの実装例を提供する
+- Streamlit組み込みの`st.login()`を使用した安全な認証フローの実装例を提供する
 - 認証必須ページと公開ページの共存パターンを示す
 
 ### 技術スタック
@@ -23,8 +23,7 @@
 | マルチページ | `st.navigation()` API |
 | 認証プロトコル | OpenID Connect (OIDC) |
 | IdP | Microsoft Entra ID |
-| 認証ライブラリ | MSAL (Microsoft Authentication Library) |
-| CSRF対策 | Cookie + HMAC Double Submit |
+| 認証ライブラリ | Streamlit `st.login()`（Authlib） |
 | 言語 | Python 3.13+ |
 
 ## 機能一覧
@@ -32,8 +31,8 @@
 | 機能名 | 説明 |
 | -------- | ------ |
 | ログイン | Microsoft Entra IDを使用したシングルサインオン。ログインボタン押下でEntra IDのログインページにリダイレクトする。 |
-| ログアウト | セッションをクリアし、Entra IDのログアウトエンドポイントにリダイレクトする。ログアウト後はアプリケーションのトップページに戻る。 |
-| 認証コールバック処理 | Entra IDからの認可コードを受け取り、トークンに交換する。Cookie + HMAC Double Submit方式でstateパラメーターを検証する。 |
+| ログアウト | `st.logout()`で認証Cookieを削除し、Entra IDのログアウトエンドポイント（end_session_endpoint）にリダイレクトする。ログアウト後はアプリケーションのトップページに戻る。 |
+| 認証コールバック処理 | `/callback`で受けたリクエストを`st.login()`のコールバック（`/oauth2callback`）へ転送する。Streamlitがstateパラメーターを検証し、認可コードをトークンに交換する。 |
 | ユーザー情報取得 | IDトークンのclaimsからユーザーID、名前、メールアドレスを抽出して表示する。 |
 | 認証ガード | 認証が必要なページへの未認証アクセスをブロックし、ログインボタンを表示する。 |
 | サイドバーアカウント表示 | 認証済み時にサイドバー下部にユーザーアバター（イニシャル）、名前、メールアドレス、ログアウトボタンを表示する。未認証時はサイドバーを非表示にする。 |
@@ -43,11 +42,14 @@
 
 ### アプリ構成
 
-`st.navigation()` APIによるマルチページ構成。`app.py` がエントリポイントとして共通レイアウト（サイトヘッダー、サイドバー）を描画し、各ページは固有のコンテンツのみを担当する。
+`server.py` が `st.App` でサーバーを起動し、`st.navigation()` APIによるマルチページ構成で動作する。`app.py` がエントリポイントとして共通レイアウト（サイトヘッダー、サイドバー）を描画し、各ページは固有のコンテンツのみを担当する。
 
 ```text
+server.py（サーバー起動設定）
+├── 認証設定を st.login() 用の secrets として渡す
+└── /callback → /oauth2callback の転送ルート
+
 app.py（エントリポイント）
-├── OAuthコールバック処理（?code= 検知時）
 ├── 共通レイアウト（サイドバー、ヘッダー）
 └── st.navigation()
     ├── Home    （/）        → pages/home.py
@@ -113,48 +115,31 @@ app.py（エントリポイント）
 | ページタイトル | 「About」を表示 |
 | アプリ説明 | 「このアプリケーションはMicrosoft Entra ID認証のサンプル実装です。」を表示 |
 | 機能一覧 | SSO、ユーザー情報取得、セッション管理、認証ガード機能の説明 |
-| 技術スタック | Streamlit、OIDC、Entra ID、MSALの説明 |
+| 技術スタック | Streamlit、OIDC、Entra ID、`st.login()`（Authlib）の説明 |
 
 ## その他
 
 ### 認証フロー
 
 ```text
-1. ユーザーがログインボタンをクリック
-2. アプリがCSRF対策用のnonceを生成
-3. nonceをブラウザCookieに保存（components.html経由でJavaScript実行）
-4. HMAC署名付きstate（nonce.HMAC(nonce, secret)）を生成
-5. Entra IDの認可エンドポイントにstateとnonceを付与してリダイレクト
-6. ユーザーがEntra IDでログイン
-7. Entra IDがアプリのリダイレクトURL（/callback）に認可コードとstateを付与してリダイレクト
-8. app.pyがクエリパラメーター（?code=）を検知
-9. Cookieからnonceを取得し、stateのHMAC署名 + nonce一致を検証（CSRF対策）
-10. アプリが認可コードをトークンエンドポイントでIDトークンに交換
-11. アプリがPyJWTでIDトークンを検証（署名、iss、aud、exp、nbf、iat、nonce）
-12. IDトークンのclaimsからユーザー情報を抽出してセッションに保存
-13. st.rerun()でページを再描画し、認証済み状態を表示
+1. ユーザーがログインボタンをクリックし、アプリがst.login()を呼ぶ
+2. Streamlitサーバーがstateとnonceを生成し、Entra IDの認可エンドポイントにリダイレクト
+3. ユーザーがEntra IDでログイン
+4. Entra IDがリダイレクトURI（/callback）に認可コードとstateを付与してリダイレクト
+5. 転送ルートがクエリパラメーターを付けたまま/oauth2callbackへリダイレクト
+6. Streamlitサーバーがstateを検証し、認可コードをトークンエンドポイントでトークンに交換
+7. AuthlibがIDトークンを検証（署名、iss、aud、exp、nonce）
+8. IDトークンのclaimsを署名付きのHttpOnly Cookieに保存し、トップページへリダイレクト
+9. アプリがst.userからユーザー情報を読み取り、認証済み状態を表示
 ```
 
-### CSRF対策: Cookie + HMAC Double Submit方式
+トークン交換で送るredirect_uriは、ログイン開始時に使った`/callback`のままである。そのため、Entra IDのアプリ登録は`/callback`のままでよい。
 
-Streamlitでは外部IdPへのリダイレクト（ブラウザのフルページナビゲーション）を挟むと`st.session_state`が失われる（セッションIDが変わるため）。そのため、OAuth stateパラメーターの検証にはブラウザCookieを使用する。
+### 認証情報の保持
 
-| 項目 | 説明 |
-| ------ | ------ |
-| nonce生成 | `secrets.token_urlsafe(32)` |
-| 署名 | `HMAC-SHA256(nonce, client_secret)` |
-| stateパラメーター | `nonce.signature` |
-| Cookie保存 | `components.html()` 経由でJavaScript実行 |
-| Cookie読み取り | `st.context.cookies`（Streamlit 1.37+） |
-| 検証 | 署名再計算 + `hmac.compare_digest` による一致確認 |
-
-### セッション管理
-
-- Streamlitの`st.session_state`を使用（認証情報の保持）
-- 保存するデータ:
-  - `authenticated`: 認証状態（bool）
-  - `user`: ユーザー情報（id, name, email）
-  - `token_claims`: IDトークンの全claims
+- `st.login()`がIDトークンのclaimsを署名付きのHttpOnly Cookieに保存する
+- アプリは`st.user`でclaimsを参照する。`st.user`はセッション開始時にCookieを読み込む
+- Cookieの署名には`AUTH_COOKIE_SECRET`を使う
 
 ### 環境変数
 
@@ -164,14 +149,14 @@ Streamlitでは外部IdPへのリダイレクト（ブラウザのフルペー�
 | AZURE_CLIENT_SECRET | クライアントシークレット | Yes |
 | AZURE_TENANT_ID | ディレクトリ（テナント）ID | Yes |
 | AZURE_REDIRECT_URI | リダイレクトURI | No（デフォルト: `http://localhost:8501/callback`） |
-| SSL_CA_FILE | カスタムCA証明書ファイル | No |
+| AUTH_COOKIE_SECRET | 認証Cookieの署名に使うシークレット | Yes |
+| SSL_CA_FILE | カスタムCA証明書ファイル（Entra IDとの通信でhttpxの`verify`に渡す） | No |
 | ENV | 環境識別子（`production`で環境変数から読み込み、それ以外は.envから読み込み） | No |
 
 ### セキュリティ考慮事項
 
-- CSRF対策: Cookie + HMAC Double Submit方式によるstateパラメーター検証
-- IDトークン検証: PyJWTによる検証（署名、発行者、対象者、有効期限、nonce）。MSAL 1.38.0以降はIDトークンを検証しないため、アプリ側で検証する
-- 標準的な実装との違い: nonceの扱いと署名鍵のキャッシュは標準的な実装と異なる。理由と本来の形は[README](../README.md#標準的な実装との違い)に記載する
-- 環境変数分離: 開発環境は```.env```ファイルのみ、本番環境は環境変数のみから設定を読み込み
-- クライアントシークレット: サーバーサイドで安全に管理（ConfidentialClientApplication使用）
-- Cookie属性: SameSite=Lax、HTTPS環境ではSecureフラグ付加、10分のTTL
+- CSRF対策: `st.login()`がstateパラメーターを生成・検証する
+- IDトークン検証: Authlibが署名、発行者、対象者、有効期限、nonceを検証する
+- 環境変数分離: 開発環境は`.env`ファイルのみ、本番環境は環境変数のみから設定を読み込み
+- クライアントシークレット: サーバーサイドで管理し、`st.App`のsecretsとして渡す
+- Cookie属性: 認証CookieはHttpOnly、SameSite=Lax、有効期間30日（Streamlitの既定）
