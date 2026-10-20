@@ -17,8 +17,7 @@ StreamlitアプリケーションにMicrosoft Entra ID（旧Azure AD）認証を
 | 👤 | IDトークンからのユーザー情報取得 |
 | 🚪 | ログイン・ログアウト機能 |
 | 🛡️ | 認証必須ページのガード機能 |
-| 🍪 | Cookie + HMAC署名によるCSRF対策（Double Submit方式） |
-| ✅ | PyJWTによるIDトークンの検証（署名、発行者、対象者、有効期限、nonce） |
+| 🍪 | Streamlit 組み込みの `st.login()` による OIDC ログイン（state、nonce、IDトークンの検証、HttpOnly Cookie を Streamlit が処理） |
 | 🧭 | `st.navigation()` APIによるマルチページ構成 |
 
 ## 📋 必要条件
@@ -50,16 +49,19 @@ AZURE_CLIENT_SECRET=your-client-secret
 AZURE_TENANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 AZURE_REDIRECT_URI=http://localhost:8501/callback
 
+# 認証Cookieの署名に使うシークレット（必須）
+# 生成例: python -c "import secrets; print(secrets.token_urlsafe(32))"
+AUTH_COOKIE_SECRET=your-random-secret
+
 # 企業プロキシ環境の場合（任意）
 SSL_CA_FILE=/path/to/your/ca.pem
 ```
 
 > [!NOTE]
 > **企業プロキシ環境について**: HTTPSトラフィックを検査する企業プロキシの環境では、
-> `SSL_CA_FILE`にプロキシのCA証明書パスを設定してください。
-> Python 3.13ではSSL検証が厳格化（`VERIFY_X509_STRICT`）されており、
-> AKI拡張のないCA証明書が拒否されるため、本アプリでは`SSL_CA_FILE`設定時に
-> このフラグを自動的に無効化します。
+> `SSL_CA_FILE`にプロキシのCA証明書パスを設定してください。この値は `st.login()` が
+> Entra ID との通信に使う httpx に `verify` として渡します。
+> Python 3.13 の SSL 検証（`VERIFY_X509_STRICT`）は有効なままです。
 
 ### 3. Azure Portalでのアプリ登録
 
@@ -81,10 +83,13 @@ make run
 
 ### マルチページ構成
 
-`st.navigation()` APIを使用し、`app.py` がルーター兼共通レイアウトとして機能します。
+`server.py` が `st.App` で Streamlit サーバーを起動し、`.env` または環境変数の認証設定を
+`st.login()` 用の secrets として渡します。`st.navigation()` APIを使用し、`app.py` がルーター兼共通レイアウトとして機能します。
 
 ```bash
-app.py              # エントリポイント（ルーター + 共通レイアウト + OAuthコールバック処理）
+server.py           # サーバー起動設定（st.App + 認証設定の secrets + コールバックの転送）
+callback.py         # /callback を st.login() の /oauth2callback へ転送するルート
+app.py              # エントリポイント（ルーター + 共通レイアウト）
 pages/
 ├── home.py         # ホームページ（ログイン/ユーザー情報表示）
 ├── about.py        # Aboutページ（認証不要）
@@ -98,62 +103,27 @@ pages/
 sequenceDiagram
     actor User as ユーザー
     participant App as Streamlit アプリ
+    participant Server as Streamlit サーバー（st.login）
     participant Entra as Microsoft Entra ID
 
     User->>App: ログインボタンを押す
-    App->>User: Cookie に nonce を設定
-    App->>Entra: HMAC 署名付き state と nonce を付けてリダイレクト
+    App->>Server: st.login()
+    Server->>Entra: state と nonce を付けてリダイレクト
     User->>Entra: サインイン
-    Entra->>App: /callback?code=...&state=...
-    App->>App: state と Cookie を検証
-    App->>Entra: 認可コードをトークンに交換
-    Entra-->>App: ID トークン
-    App->>App: ID トークンを検証し、セッションに保存
-    App->>User: ホームページを表示
+    Entra->>Server: /callback?code=...&state=...
+    Server->>Server: /oauth2callback へ転送
+    Server->>Entra: 認可コードをトークンに交換
+    Entra-->>Server: ID トークン
+    Server->>Server: state と ID トークンを検証し、HttpOnly Cookie に保存
+    Server->>App: ホームページへリダイレクト
+    App->>User: st.user のユーザー情報を表示
 ```
 
-1. ユーザーがログインボタンを押す
-2. Cookie にnonceを設定し、HMAC署名付きstateをパラメーターとしてEntra IDへリダイレクト
-3. Entra IDで認証後、認可コード付きでアプリにリダイレクト
-4. `app.py` がコールバックを検知（`?code=`）し、state/Cookie検証後にトークン交換
-5. セッションに認証情報を保存し、ホームページを表示
-
-### 標準的な実装との違い
-
-> [!WARNING]
-> このサンプルには、Streamlit の制約などから標準的な実装とは異なる作りにしている箇所があります。
-> 本番で使う場合は、各項目の「本来の形」を検討してください。
-
-#### OIDC の nonce
-
-| 項目 | 本来の形 | このサンプル |
-| --- | --- | --- |
-| nonce に送る値 | Cookie に保存したランダム値のハッシュ | Cookie に保存したランダム値そのもの |
-| Cookie の HttpOnly 属性 | 付ける | 付けない |
-| CSRF 対策の state との関係 | 独立した値を使う | state に含める値と同じ値を使う |
-
-- 本来の形: [OpenID Connect Core 1.0][oidc-core] の 15.5.2 は、
-  ランダム値を HttpOnly の Cookie に保存し、そのハッシュを nonce として送る方式を示しています
-- この形にしている理由: Streamlit のスクリプトからは HTTP レスポンスの `Set-Cookie` を返せず、Cookie は `components.html` 内の
-  JavaScript で書き込んでいます。このため HttpOnly 属性を付けられません。Cookie を1つに保つため、CSRF 対策用の値を nonce にも使っています
-- 影響: state にも同じ値がそのまま含まれるため、この値は認可リクエストの URL に現れます。悪用するには、攻撃者が利用者のブラウザーに Cookie を仕込み、かつ認可コードを入手する必要があります
-
-#### ID トークンの署名鍵の取得とキャッシュ
-
-| 項目 | 本来の形 | このサンプル |
-| --- | --- | --- |
-| キャッシュの範囲 | プロセス全体で共有する | ブラウザーのセッションごと（`st.session_state`） |
-| 定期的な更新 | 1時間ごとにバックグラウンドで更新する | しない |
-| 未知の鍵 ID（kid）を受け取ったとき | 鍵を取り直す（5分以上の間隔をあける） | 取り直す（PyJWT の `PyJWKClient` の機能） |
-| 鍵の取得に失敗したとき | 最後に取得できた鍵で検証を続ける | 検証に失敗し、ログインできない |
-
-- 本来の形: [Signing key rollover in Microsoft identity platform][key-rollover] の
-  「Best practices for keys metadata caching and validation」に従います
-- この形にしている理由: 認証クライアントを `st.session_state` に保持しており、`st.session_state` は OAuth のリダイレクトで失われます。コールバックのたびにクライアントを作り直し、OIDC メタデータと署名鍵をログインごとに取得します
-- 影響: 古い鍵が残って正しいトークンを拒否することはありません。代わりにログインのたびに Entra ID へ HTTP 通信が2回発生し、取得に失敗するとログインできません
-
-[oidc-core]: https://openid.net/specs/openid-connect-core-1_0.html
-[key-rollover]: https://learn.microsoft.com/en-us/entra/identity-platform/signing-key-rollover
+1. ユーザーがログインボタンを押すと、`st.login()` が Entra ID へリダイレクトする
+2. Entra ID で認証後、`/callback` に認可コード付きで戻り、st.login() のコールバック（`/oauth2callback`）へ転送される
+3. Streamlit（Authlib）が state を検証し、認可コードをトークンに交換して ID トークンを検証する
+4. ユーザー情報を HttpOnly の Cookie に保存し、ホームページへリダイレクトする
+5. アプリは `st.user` からユーザー情報を読み取る
 
 ## 💡 使用例
 
@@ -162,19 +132,11 @@ sequenceDiagram
 ```python
 import streamlit as st
 from entra_id_auth_example import (
-    handle_callback,
     render_sidebar_account,
     render_site_header,
 )
 
 st.set_page_config(page_title="My App", page_icon="🔐")
-
-# OAuthコールバック処理
-if "code" in st.query_params:
-    if handle_callback():
-        st.rerun()
-    else:
-        st.stop()
 
 # 共通レイアウト
 render_sidebar_account()

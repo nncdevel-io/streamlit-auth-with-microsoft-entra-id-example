@@ -5,7 +5,6 @@ import logging
 import streamlit as st
 
 from entra_id_auth_example import (
-    handle_callback,
     render_sidebar_account,
     render_site_header,
 )
@@ -20,17 +19,6 @@ st.set_page_config(
     page_icon="🔐",
     layout="centered",
 )
-
-# OAuthコールバック処理（navigation設定前に実行）
-# Entra IDからのリダイレクト（?code=...&state=...）を受け取り、トークン交換を行う
-if "code" in st.query_params:
-    if handle_callback():
-        st.rerun()
-    else:
-        if st.button("トップページへ", type="primary"):
-            st.query_params.clear()
-            st.rerun()
-        st.stop()
 
 # 共通レイアウト
 render_sidebar_account()

@@ -8,24 +8,30 @@ See `make help`. Use `make check` (lint + type-check) before committing.
 
 ## Architecture
 
-`src/entra_id_auth_example/app.py` is the Streamlit entrypoint. It handles the OAuth callback
-**before** `st.navigation()` (the callback is not a page), then renders shared layout and routes
-to `pages/`.
+`streamlit run` targets `src/entra_id_auth_example/server.py`, which builds an `st.App` for the
+script `app.py`. `server.py` passes the auth config as `st.secrets["auth"]` and adds the
+`/callback` forwarding route. `app.py` renders shared layout and routes to `pages/`.
+Authentication is Streamlit's built-in `st.login()` / `st.logout()` / `st.user`.
 
 ## Non-obvious gotchas
 
-- **CSRF state**: Cookie + HMAC Double Submit. `st.session_state` is lost across the OAuth
-  redirect. `client_secret` doubles as the HMAC key (`handlers.py:_create_signed_state`).
-- **`login()` two-stage redirect**: cookie is set via `components.html` (iframe), then
-  `<meta http-equiv="refresh" content="1;...">` redirects after 1s so the cookie write completes.
-  Do not collapse — iframes lack `allow-top-navigation`.
+- **Callback path**: `st.login()` only handles `/oauth2callback` (fixed in Streamlit). The Entra ID
+  app registration keeps `/callback`, so `callback.py` forwards `/callback?...` to
+  `/oauth2callback?...`. The token exchange still sends `/callback` as `redirect_uri` (Authlib
+  reuses the value from the authorize request). Streamlit logs "Redirect URI does not end with
+  /oauth2callback" at startup; this is expected.
+- **Config is passed as secrets**: `config.py:AuthConfig.to_streamlit_secrets` builds the `[auth]`
+  section; there is no `.streamlit/secrets.toml`. `AUTH_COOKIE_SECRET` is required.
+- **`st.user` reads the auth cookie only at session start.** Call `st.login()` / `st.logout()` to
+  update it within a running session.
 - **Multi-page uses `st.navigation()`**, not the file-based `pages/` auto-discovery. Adding a file
   under `pages/` does nothing unless it is registered in `app.py`.
 - **Config loading** (`config.py:_get_config_values`):
   - `ENV=production` → reads `os.environ` only
   - otherwise → reads `.env` only (shell env vars are **ignored** in dev mode)
-- **`SSL_CA_FILE`** disables `ssl.VERIFY_X509_STRICT` (Python 3.13 default). Required for corporate
-  proxy CAs without the AKI extension.
+- **`SSL_CA_FILE`** is passed to httpx (used by Authlib) as `client_kwargs.verify`. An
+  `ssl.SSLContext` cannot be passed through secrets, so `ssl.VERIFY_X509_STRICT` (Python 3.13
+  default) stays enabled.
 
 ## Conventions
 

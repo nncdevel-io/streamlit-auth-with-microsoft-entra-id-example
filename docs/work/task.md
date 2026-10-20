@@ -47,12 +47,13 @@ related:
 | TASK-009 | ✅ | ruff の新しいバージョンで出る lint と format の指摘を解消する | TASK-008 |
 | TASK-010 | ✅ | mypy 2.x の strict モードで出る型エラーを解消する | TASK-008 |
 | TASK-011 | ✅ | 影響一覧に沿ってコードとテストを直し、make test を通す | TASK-007,TASK-008 |
-| TASK-017 | 🧪 | PyJWT で ID トークンの署名・発行者・対象者・有効期限・nonce を検証する処理を実装する | TASK-008 |
+| TASK-017 | 🚫 | PyJWT で ID トークンの署名・発行者・対象者・有効期限・nonce を検証する処理を実装する | TASK-008 |
 | TASK-012 | ✅ | make docs で API ドキュメントを生成できることを確認する | TASK-008 |
 | TASK-013 | ✅ | ヘッダーとサイドバーのカスタム CSS を Streamlit 最新版の画面に合わせて直す | TASK-011 |
 | TASK-014 | ✅ | 更新後に Entra ID のログインからログアウトまでを確認し、更新前と比べる | TASK-011,TASK-013,TASK-017 |
 | TASK-015 | ✅ | SSL_CA_FILE を指定した社内プロキシー環境で Entra ID に接続できることを確認する | TASK-011 |
 | TASK-016 | ✅ | README と docs の Streamlit のバージョン記載を更新する | TASK-008 |
+| TASK-018 | ✅ | 認証を Streamlit の st.login() に置き換え、社内プロキシー環境で Entra ID に接続できるかを確認する | TASK-017 |
 
 ## タスク詳細（補足が必要な場合のみ）
 
@@ -118,7 +119,14 @@ related:
 - 補足: 単体テストで、署名・iss・aud・exp・nbf・nonce の不一致、nonce の欠落、署名なしトークン、メタデータ取得失敗を拒否することを確認した
 - 補足: 実際の Entra ID が発行したトークンでの検証は TASK-014 で確認済み（2026-10-20）
 - 補足: nonce の扱いと署名鍵のキャッシュが標準的な実装と異なる点について、理由と本来の形を README の「標準的な実装との違い」に記載した（2026-10-20）
-- 注意: 未確認事項は、利用者のレビュー
+- 補足: 中止。TASK-018 で `st.login()` に置き換え、IDトークンの検証は Authlib が行うため、PyJWT での実装は削除した（2026-10-20）
+
+### TASK-018
+
+- 補足: ブランチ `feature/st-login` で実装した。MSAL、PyJWT、自前の CSRF 対策を削除し、`server.py` の `st.App` で認証設定を secrets として渡す
+- 補足: 新しい設定値 `AUTH_COOKIE_SECRET` を必須にした。Azure の登録を変えずに済むよう、`/callback` で受けたリクエストを st.login() の `/oauth2callback` へ転送する
+- 補足: 利用者が実環境でログインできることを確認した（2026-10-20）
+- 補足: README、`docs/` の要件・仕様・設計、CLAUDE.md、AGENTS.md、API ドキュメントを新しい方式に合わせて書き直した
 
 ### TASK-012
 
