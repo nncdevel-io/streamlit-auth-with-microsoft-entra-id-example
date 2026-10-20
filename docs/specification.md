@@ -171,6 +171,7 @@ Streamlitでは外部IdPへのリダイレクト（ブラウザのフルペー�
 
 - CSRF対策: Cookie + HMAC Double Submit方式によるstateパラメーター検証
 - IDトークン検証: PyJWTによる検証（署名、発行者、対象者、有効期限、nonce）。MSAL 1.38.0以降はIDトークンを検証しないため、アプリ側で検証する
+- 標準的な実装との違い: nonceの扱いと署名鍵のキャッシュは標準的な実装と異なる。理由と本来の形は[README](../README.md#標準的な実装との違い)に記載する
 - 環境変数分離: 開発環境は```.env```ファイルのみ、本番環境は環境変数のみから設定を読み込み
 - クライアントシークレット: サーバーサイドで安全に管理（ConfidentialClientApplication使用）
 - Cookie属性: SameSite=Lax、HTTPS環境ではSecureフラグ付加、10分のTTL
