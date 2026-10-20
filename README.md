@@ -185,7 +185,8 @@ make clean        # キャッシュ削除
 - [アーキテクチャ設計書](docs/architecture.md)
 - [アプリケーション仕様書](docs/specification.md)
 - [初期開発のタスク一覧](docs/task.md)
-- [作業計画](docs/work/task.md)
+- [依存関係更新の作業計画（完了）](docs/work/done/task.md)
+- [依存関係更新の影響一覧](docs/work/done/dependency-upgrade-impact.md)
 
 本リポジトリは、AIを使った開発のサンプルも兼ねています。
 `docs/task.md`は、AIを使った初期開発で用いたタスク一覧です。

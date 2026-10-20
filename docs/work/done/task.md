@@ -83,7 +83,7 @@ related:
 
 ### TASK-007
 
-- 補足: 成果物は `docs/work/dependency-impact.md`
+- 補足: 成果物は `docs/work/done/dependency-upgrade-impact.md`
 - 補足: msal 1.38.0 で ID トークンの検証がなくなった件は、アプリ側で検証を実装する方針に決定（TASK-017）
 - 補足: 対象は streamlit 1.55〜1.66、msal 1.35〜1.39、mypy 2.x、pandas 3.x、protobuf 7.x、cryptography 47〜50
 - 注意: `streamlit.runtime.scriptrunner.get_script_run_ctx`（非公開 API）と `components.html` の変更を必ず確認する
